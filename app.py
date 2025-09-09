@@ -1,31 +1,36 @@
+
+---
+
+# ✅ `app.py` (complete, store-locked & all metrics)
+
+```python
+# app.py — Store-Locked Metrics Dashboard (Labor, Sales, Guests, Voids, HME)
+
 from __future__ import annotations
 import os
-import re
-from pathlib import Path
+from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 import psycopg2
 import psycopg2.extras as pgu
 
-# =========================
-# Store lock via environment
-# =========================
-STORE_PC = os.getenv("STORE_PC")
+# =====================================================
+# 1) STORE LOCK (no UI controls) + Page config
+# =====================================================
+STORE_PC = os.getenv("STORE_PC")  # e.g., 301290
 if not STORE_PC:
-    st.error("STORE_PC env var must be set for this deployment (e.g., 301290).")
+    st.error("STORE_PC environment variable not set. Set it per-deployment (e.g., 301290).")
     st.stop()
 
-st.set_page_config(page_title=f"Store {STORE_PC} — HME", layout="wide")
-st.title(f"🏪 Store {STORE_PC} — HME (Latest)")
+st.set_page_config(page_title=f"Store {STORE_PC} — Metrics Dashboard", layout="wide")
+st.title(f"🏪 Store {STORE_PC} — Metrics Dashboard (Latest)")
 
-# =========================
-# DB connection helper
-# =========================
-# Expects a [supabase] section in st.secrets
-# [supabase]
-# host=..., port=6543, user=..., password=..., dbname=postgres, sslmode=require
+# =====================================================
+# 2) DB connection (Supabase Postgres via Streamlit secrets)
+# =====================================================
+# Expect st.secrets["supabase"] with keys: host, port, user, password, dbname, sslmode
 
-def get_conn():
+def get_supabase_connection():
     cfg = st.secrets["supabase"]
     return psycopg2.connect(
         host=cfg["host"],
@@ -36,166 +41,327 @@ def get_conn():
         sslmode=cfg.get("sslmode", "require"),
     )
 
-# =========================
-# Optional local ingester (CLI use only)
-# =========================
-# Mirrors your upload_hme_to_supabase.py so you can run `python app.py --ingest`
-# locally or in a CI job. It is NO-OP during normal Streamlit runtime.
+# =====================================================
+# 3) Helpers (dates, math, formatting)
+# =====================================================
 
-TARGET_COLS = [
-    "date", "store", "time_measure", "total_cars", "menu_all",
-    "greet_all", "service", "lane_queue", "lane_total"
+def get_period_dates(ref_date: date, period: str) -> tuple[date, date]:
+    if period == "week":
+        start = ref_date - timedelta(days=6)
+        end = ref_date
+    elif period == "month":
+        start = ref_date.replace(day=1)
+        end = ref_date
+    elif period == "quarter":
+        q = (ref_date.month - 1) // 3 + 1
+        start = date(ref_date.year, 3 * q - 2, 1)
+        end = ref_date
+    elif period == "year":
+        start = date(ref_date.year, 1, 1)
+        end = ref_date
+    else:
+        start = ref_date
+        end = ref_date
+    return start, end
+
+
+def get_prev_period_dates(ref_date: date, period: str) -> tuple[date, date]:
+    if period == "week":
+        end = ref_date - timedelta(days=7)
+        start = end - timedelta(days=6)
+    elif period == "month":
+        first = ref_date.replace(day=1)
+        end = first - timedelta(days=1)
+        start = end.replace(day=1)
+    elif period == "quarter":
+        q = (ref_date.month - 1) // 3 + 1
+        if q == 1:
+            end = date(ref_date.year - 1, 12, 31)
+            start = date(ref_date.year - 1, 10, 1)
+        else:
+            end = date(ref_date.year, 3 * (q - 1), 1) - timedelta(days=1)
+            start = date(end.year, 3 * (q - 1) - 2, 1)
+    elif period == "year":
+        end = date(ref_date.year - 1, 12, 31)
+        start = date(ref_date.year - 1, 1, 1)
+    else:
+        start = ref_date
+        end = ref_date
+    return start, end
+
+
+def safe_div(a, b):
+    try:
+        return (a / b * 100.0) if b and b != 0 else None
+    except Exception:
+        return None
+
+
+def weighted_avg(series, weights):
+    if series is None or weights is None:
+        return None
+    s = pd.Series(series)
+    w = pd.Series(weights)
+    denom = w.sum(skipna=True)
+    return float((s * w).sum(skipna=True) / denom) if denom and denom > 0 else None
+
+
+def format_secs(x):
+    return f"{x:.0f} sec" if x is not None else "N/A"
+
+# =====================================================
+# 4) Resolve latest business date for this store
+#    (use the max date in sales_summary; fallback to labor_metrics)
+# =====================================================
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT max(date) FROM public.sales_summary WHERE store = %s", (STORE_PC,))
+    row = cur.fetchone()
+    sales_max = row[0] if row else None
+
+    cur.execute("SELECT max(date) FROM public.labor_metrics WHERE store = %s", (STORE_PC,))
+    row = cur.fetchone()
+    labor_max = row[0] if row else None
+
+if not sales_max and not labor_max:
+    st.info("No data found yet for this store in sales_summary/labor_metrics.")
+    st.stop()
+
+END_DATE: date = (sales_max or labor_max)  # type: ignore
+st.caption(f"Latest date (store-locked): {END_DATE}")
+
+# =====================================================
+# 5) LABOR % to SALES — Weekly / MTD / QTD / YTD
+# =====================================================
+periods = ["week", "month", "quarter", "year"]
+labels = ["Weekly", "MTD", "QTD", "YTD"]
+
+labor_metrics = []
+with get_supabase_connection() as conn, conn.cursor(cursor_factory=pgu.RealDictCursor) as cur:
+    for period in periods:
+        s, e = get_period_dates(END_DATE, period)
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(total_pay),0) AS payroll_total
+            FROM public.labor_metrics
+            WHERE store = %s AND date BETWEEN %s AND %s
+            """,
+            (STORE_PC, s, e),
+        )
+        payroll = float(cur.fetchone()["payroll_total"] or 0)
+
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(net_sales),0) AS sales_total
+            FROM public.sales_summary
+            WHERE store = %s AND date BETWEEN %s AND %s
+            """,
+            (STORE_PC, s, e),
+        )
+        sales = float(cur.fetchone()["sales_total"] or 0)
+        pct = safe_div(payroll, sales)
+        labor_metrics.append((labels[periods.index(period)], pct))
+
+st.markdown("## 💼 Labor Metrics")
+cols = st.columns(4)
+for i, (label, pct) in enumerate(labor_metrics):
+    cols[i].metric(f"Labor % to Sales ({label})", f"{pct:.2f}%" if pct is not None else "N/A")
+
+# =====================================================
+# 6) SALES % change — Weekly / MTD / QTD / YTD (vs previous)
+# =====================================================
+def period_sum(cur, table: str, col: str, s: date, e: date):
+    cur.execute(
+        f"SELECT COALESCE(SUM({col}),0) FROM public.{table} WHERE store = %s AND date BETWEEN %s AND %s",
+        (STORE_PC, s, e),
+    )
+    return float(cur.fetchone()[0] or 0)
+
+sales_changes = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        curr_s, curr_e = get_period_dates(END_DATE, period)
+        prev_s, prev_e = get_prev_period_dates(END_DATE, period)
+        curr_sales = period_sum(cur, "sales_summary", "net_sales", curr_s, curr_e)
+        prev_sales = period_sum(cur, "sales_summary", "net_sales", prev_s, prev_e)
+        change = safe_div(curr_sales - prev_sales, prev_sales)
+        sales_changes.append((labels[periods.index(period)], change))
+
+st.markdown("## 💵 Sales Metrics")
+cols = st.columns(4)
+for i, (label, change) in enumerate(sales_changes):
+    cols[i].metric(f"Sales % Change ({label})", f"{change:.2f}%" if change is not None else "N/A")
+
+# =====================================================
+# 7) GUEST COUNT % change — Weekly / MTD / QTD / YTD
+# =====================================================
+guest_changes = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        curr_s, curr_e = get_period_dates(END_DATE, period)
+        prev_s, prev_e = get_prev_period_dates(END_DATE, period)
+        curr_guests = period_sum(cur, "sales_summary", "guest_count", curr_s, curr_e)
+        prev_guests = period_sum(cur, "sales_summary", "guest_count", prev_s, prev_e)
+        change = safe_div(curr_guests - prev_guests, prev_guests)
+        guest_changes.append((labels[periods.index(period)], change))
+
+st.markdown("## 👥 Guest Count Metrics")
+cols = st.columns(4)
+for i, (label, change) in enumerate(guest_changes):
+    cols[i].metric(f"Guest % Change ({label})", f"{change:.2f}%" if change is not None else "N/A")
+
+# =====================================================
+# 8) VOID COUNTS — Weekly / MTD / QTD / YTD
+# =====================================================
+void_counts = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        s, e = get_period_dates(END_DATE, period)
+        void_qty = period_sum(cur, "sales_summary", "void_qty", s, e)
+        void_counts.append((labels[periods.index(period)], void_qty))
+
+st.markdown("## 🧾 Void Counts")
+cols = st.columns(4)
+for i, (label, void_qty) in enumerate(void_counts):
+    cols[i].metric(f"Void Count ({label})", f"{int(void_qty)}" if void_qty is not None else "N/A")
+
+# =====================================================
+# 9) HME (Drive-Thru) Metrics — Weighted by Cars
+#    • Period KPIs: Weekly / MTD / QTD / YTD (current vs previous)
+#    • Daypart breakdown for the analysis window (last 7 days to END_DATE)
+# =====================================================
+st.markdown("## 🚗 HME (Drive-Thru) Metrics")
+
+HME_TARGET_COLS = [
+    "date", "time_measure", "total_cars", "menu_all", "greet_all",
+    "service", "lane_queue", "lane_total"
 ]
 
-INSERT_SQL = f"""
-insert into public.hme_report ({",".join(TARGET_COLS)})
-values (
-    %(date)s, %(store)s, %(time_measure)s,
-    %(total_cars)s, %(menu_all)s, %(greet_all)s,
-    %(service)s, %(lane_queue)s, %(lane_total)s
-)
-ON CONFLICT (store, date, time_measure) DO UPDATE SET
-    total_cars = EXCLUDED.total_cars,
-    menu_all   = EXCLUDED.menu_all,
-    greet_all  = EXCLUDED.greet_all,
-    service    = EXCLUDED.service,
-    lane_queue = EXCLUDED.lane_queue,
-    lane_total = EXCLUDED.lane_total;
-"""
+def fetch_hme(store: str, start: date, end: date) -> pd.DataFrame:
+    q = f"""
+        SELECT {', '.join(HME_TARGET_COLS)}
+        FROM public.hme_report
+        WHERE store = %s AND date BETWEEN %s AND %s
+    """
+    with get_supabase_connection() as conn:
+        df = pd.read_sql(q, conn, params=[store, start, end])
+    return df
 
-THIS_FILE = Path(__file__).resolve()
-DATA_DIR  = THIS_FILE.parent / "data" / "hme"
+def summarize_hme(df: pd.DataFrame) -> dict[str, float | int | None]:
+    if df is None or df.empty:
+        return {"cars": 0, "menu_all": None, "greet_all": None, "service": None,
+                "lane_queue": None, "lane_total": None}
+    cars = df["total_cars"].fillna(0)
+    return {
+        "cars": int(cars.sum()),
+        "menu_all": weighted_avg(df["menu_all"], cars),
+        "greet_all": weighted_avg(df["greet_all"], cars),
+        "service": weighted_avg(df["service"], cars),
+        "lane_queue": weighted_avg(df["lane_queue"], cars),
+        "lane_total": weighted_avg(df["lane_total"], cars),
+    }
 
-def _pc_number_from_store(store_text: str) -> int | None:
-    if not isinstance(store_text, str):
-        store_text = str(store_text) if store_text is not None else ""
-    m = re.match(r"\s*(\d+)", store_text)
-    return int(m.group(1)) if m else None
+def pct_change(curr, prev):
+    if prev is None or prev == 0 or curr is None:
+        return None
+    try:
+        return (curr - prev) / prev * 100.0
+    except Exception:
+        return None
 
-def _find_latest_transformed() -> Path | None:
-    tdir = DATA_DIR / "transformed"
-    cand = list(tdir.glob("hme_transformed.xlsx")) or list(tdir.glob("hme_transformed.csv"))
-    if not cand:
-        cand = sorted(tdir.glob("hme_transformed_*.xlsx"), reverse=True) + \
-               sorted(tdir.glob("hme_transformed_*.csv"),  reverse=True)
-    return max(cand, key=lambda p: p.stat().st_mtime) if cand else None
+hme_labels = ["Weekly", "MTD", "QTD", "YTD"]
+hme_periods = ["week", "month", "quarter", "year"]
+hme_rows = []
+for per, label in zip(hme_periods, hme_labels):
+    curr_s, curr_e = get_period_dates(END_DATE, per)
+    prev_s, prev_e = get_prev_period_dates(END_DATE, per)
 
-def ingest_latest_transformed():
-    src = _find_latest_transformed()
-    if not src:
-        print("[INGEST] No transformed file found under data/hme/transformed/")
-        return
-    print(f"[INGEST] Loading {src.name}")
-    if src.suffix.lower() == ".xlsx":
-        df = pd.read_excel(src)
-    else:
-        df = pd.read_csv(src)
+    df_curr = fetch_hme(STORE_PC, curr_s, curr_e)
+    df_prev = fetch_hme(STORE_PC, prev_s, prev_e)
 
-    needed = [
-        "Date","store","time_measure","Total Cars","menu_all","greet_all",
-        "service","lane_queue","lane_total"
-    ]
-    missing = [c for c in needed if c not in df.columns]
-    if missing:
-        raise ValueError(f"Missing columns in transformed file: {missing}")
+    s_curr = summarize_hme(df_curr)
+    s_prev = summarize_hme(df_prev)
 
-    out = pd.DataFrame({
-        "date": pd.to_datetime(df["Date"], errors="coerce").dt.date,
-        "store": df["store"].apply(_pc_number_from_store),
-        "time_measure": df["time_measure"].astype(str),
-        "total_cars": pd.to_numeric(df["Total Cars"], errors="coerce").astype("Int64"),
-        "menu_all":   pd.to_numeric(df["menu_all"],   errors="coerce").astype("Int64"),
-        "greet_all":  pd.to_numeric(df["greet_all"],  errors="coerce").astype("Int64"),
-        "service":    pd.to_numeric(df["service"],    errors="coerce").astype("Int64"),
-        "lane_queue": pd.to_numeric(df["lane_queue"], errors="coerce").astype("Int64"),
-        "lane_total": pd.to_numeric(df["lane_total"], errors="coerce").astype("Int64"),
+    hme_rows.append({
+        "label": label,
+        "curr": s_curr,
+        "prev": s_prev,
+        "delta": {
+            "cars": pct_change(s_curr["cars"], s_prev["cars"]) if s_prev["cars"] else None,
+            "menu_all": pct_change(s_curr["menu_all"], s_prev["menu_all"]),
+            "greet_all": pct_change(s_curr["greet_all"], s_prev["greet_all"]),
+            "service": pct_change(s_curr["service"], s_prev["service"]),
+            "lane_queue": pct_change(s_curr["lane_queue"], s_prev["lane_queue"]),
+            "lane_total": pct_change(s_curr["lane_total"], s_prev["lane_total"]),
+        }
     })
-    out = out[out["store"].notna()].copy()
-    out = out.astype(object).where(pd.notnull(out), None)
 
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.executemany(INSERT_SQL, out.to_dict(orient="records"))
-        conn.commit()
-    print("[INGEST] Upsert complete.")
+# KPI layout: Lane Total (primary), then Service, Greet, Menu, Cars
+kpi_titles = [
+    ("Lane Total (avg)", "lane_total"),
+    ("Service (avg)", "service"),
+    ("Greet (avg)", "greet_all"),
+    ("Menu (avg)", "menu_all"),
+    ("Cars (total)", "cars"),
+]
 
-# =========================
-# LIVE VIEW (latest date for STORE_PC)
-# =========================
-with get_conn() as conn, conn.cursor(cursor_factory=pgu.RealDictCursor) as cur:
-    cur.execute(
-        """
-        SELECT max(date) AS max_date
-        FROM public.hme_report
-        WHERE store = %s
-        """,
-        (STORE_PC,),
+for (title, key) in kpi_titles:
+    cols = st.columns(4)
+    for i, row in enumerate(hme_rows):
+        curr_val = row["curr"][key]
+        delta = row["delta"][key]
+
+        if key == "cars":
+            display = f"{int(curr_val) if curr_val is not None else 0}"
+        else:
+            display = format_secs(curr_val)
+
+        if delta is None:
+            cols[i].metric(f"{title} — {row['label']}", display)
+        else:
+            cols[i].metric(f"{title} — {row['label']}", display, f"{delta:.1f}%")
+
+# Daypart breakdown for last 7 days up to END_DATE
+ANALYSIS_START, ANALYSIS_END = END_DATE - timedelta(days=6), END_DATE
+st.markdown("### Daypart Breakdown (last 7 days)")
+
+df_sel = fetch_hme(STORE_PC, ANALYSIS_START, ANALYSIS_END)
+if df_sel.empty:
+    st.info("No HME records for the analysis window.")
+else:
+    agg = (
+        df_sel
+        .assign(total_cars=df_sel["total_cars"].fillna(0))
+        .groupby("time_measure", dropna=False, as_index=False)
+        .apply(lambda g: pd.Series({
+            "total_cars": int(g["total_cars"].sum()),
+            "menu_all_avg": weighted_avg(g["menu_all"], g["total_cars"]),
+            "greet_all_avg": weighted_avg(g["greet_all"], g["total_cars"]),
+            "service_avg": weighted_avg(g["service"], g["total_cars"]),
+            "lane_queue_avg": weighted_avg(g["lane_queue"], g["total_cars"]),
+            "lane_total_avg": weighted_avg(g["lane_total"], g["total_cars"]),
+        }))
+        .sort_values(by="time_measure")
+        .reset_index(drop=True)
     )
-    row = cur.fetchone()
-    if not row or not row["max_date"]:
-        st.info("No HME data yet for this store.")
-        st.stop()
 
-    max_date = row["max_date"]
-    st.caption(f"Latest date: {max_date}")
+    def fsec(v): return f"{v:.0f}" if v is not None else "—"
+    agg_display = agg.copy()
+    agg_display["menu_all_avg"] = agg_display["menu_all_avg"].map(fsec)
+    agg_display["greet_all_avg"] = agg_display["greet_all_avg"].map(fsec)
+    agg_display["service_avg"] = agg_display["service_avg"].map(fsec)
+    agg_display["lane_queue_avg"] = agg_display["lane_queue_avg"].map(fsec)
+    agg_display["lane_total_avg"] = agg_display["lane_total_avg"].map(fsec)
+    agg_display.rename(columns={
+        "time_measure": "Daypart",
+        "total_cars": "Cars",
+        "menu_all_avg": "Menu (avg sec)",
+        "greet_all_avg": "Greet (avg sec)",
+        "service_avg": "Service (avg sec)",
+        "lane_queue_avg": "Lane Queue (avg sec)",
+        "lane_total_avg": "Lane Total (avg sec)",
+    }, inplace=True)
 
-    cur.execute(
-        """
-        SELECT date, store, time_measure, total_cars, menu_all, greet_all, service, lane_queue, lane_total
-        FROM public.hme_report
-        WHERE store = %s AND date = %s
-        ORDER BY time_measure
-        """,
-        (STORE_PC, max_date),
-    )
-    rows = cur.fetchall()
+    st.dataframe(agg_display, use_container_width=True)
 
-df = pd.DataFrame(rows)
-
-# =========================
-# KPIs
-# =========================
-left, mid1, mid2, right = st.columns(4)
-left.metric("Total Cars (sum)", int(df["total_cars"].fillna(0).sum()))
-mid1.metric("Menu All (avg)", round(df["menu_all"].mean(), 2))
-mid2.metric("Greet All (avg)", round(df["greet_all"].mean(), 2))
-right.metric("Service (avg)", round(df["service"].mean(), 2))
-
-c1, c2, c3 = st.columns(3)
-c1.metric("Lane Queue (avg)", round(df["lane_queue"].mean(), 2))
-c2.metric("Lane Total (avg)", round(df["lane_total"].mean(), 2))
-c3.metric("Time Buckets", df["time_measure"].nunique())
-
-# =========================
-# Tables & Charts
-# =========================
-st.subheader("Lane & Service by Time")
-show_cols = ["time_measure", "lane_queue", "lane_total", "menu_all", "greet_all", "service", "total_cars"]
-st.dataframe(df[show_cols], use_container_width=True)
-
-st.subheader("Trends (by time_measure)")
-line_df = df.copy()
-try:
-    line_df["_tm_sort"] = pd.to_datetime(line_df["time_measure"], format="%H:%M").dt.time
-    line_df = line_df.sort_values("_tm_sort")
-except Exception:
-    line_df = line_df.sort_values("time_measure")
-
-st.line_chart(line_df.set_index("time_measure")[
-    ["total_cars", "lane_total", "lane_queue", "menu_all", "greet_all", "service"]
-])
-
-# =========================
 # Footer
-# =========================
-st.caption("Data source: public.hme_report (Supabase)")
-
-# =========================
-# CLI entrypoint for ingestion
-# =========================
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "--ingest":
-        ingest_latest_transformed()
-        print("Done.")
-    else:
-        print("This module is meant to be run by Streamlit. For ingestion use: python app.py --ingest")
+st.caption("Data sources: public.sales_summary, public.labor_metrics, public.hme_report (Supabase)")
