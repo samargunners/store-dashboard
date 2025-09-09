@@ -11,10 +11,21 @@ import psycopg2.extras as pgu
 # =====================================================
 # 1) STORE LOCK (no UI controls) + Page config
 # =====================================================
-STORE_PC = os.getenv("STORE_PC")  # e.g., 301290
+STORE_PC = os.getenv("STORE_PC")
 if not STORE_PC:
-    st.error("STORE_PC environment variable not set. Set it per-deployment (e.g., 301290).")
+    # Fallback to Secrets -> [env]
+    STORE_PC = (st.secrets.get("env", {}) or {}).get("STORE_PC")
+
+# Normalize
+if isinstance(STORE_PC, (int, float)):
+    STORE_PC = str(int(STORE_PC))
+if STORE_PC:
+    STORE_PC = str(STORE_PC).strip()
+
+if not STORE_PC:
+    st.error("STORE_PC environment variable not set. Provide it under Secrets as:\n\n[env]\nSTORE_PC = \"301290\"\n\nOr set an OS env var named STORE_PC.")
     st.stop()
+
 
 st.set_page_config(page_title=f"Store {STORE_PC} — Metrics Dashboard", layout="wide")
 st.title(f"🏪 Store {STORE_PC} — Metrics Dashboard (Latest)")
