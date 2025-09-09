@@ -1,9 +1,3 @@
-
----
-
-# ✅ `app.py` (complete, store-locked & all metrics)
-
-```python
 # app.py — Store-Locked Metrics Dashboard (Labor, Sales, Guests, Voids, HME)
 
 from __future__ import annotations
