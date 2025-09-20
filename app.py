@@ -169,7 +169,10 @@ with get_supabase_connection() as conn, conn.cursor(cursor_factory=pgu.RealDictC
 st.markdown("## 💼 Labor Metrics")
 cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
-    cols[i].metric(f"Labor % to Sales ({label})", f"{pct:.2f}%" if pct is not None else "N/A")
+    color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                    f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct:.2f}%</span>"
+                    f"</div>", unsafe_allow_html=True)
 
 # =====================================================
 # 6) SALES % change — Weekly / MTD / QTD / YTD (vs previous)
@@ -194,7 +197,10 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 💵 Sales Metrics")
 cols = st.columns(4)
 for i, (label, change) in enumerate(sales_changes):
-    cols[i].metric(f"Sales % Change ({label})", f"{change:.2f}%" if change is not None else "N/A")
+    color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                    f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                    f"</div>", unsafe_allow_html=True)
 
 # =====================================================
 # 7) GUEST COUNT % change — Weekly / MTD / QTD / YTD
@@ -212,7 +218,10 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 👥 Guest Count Metrics")
 cols = st.columns(4)
 for i, (label, change) in enumerate(guest_changes):
-    cols[i].metric(f"Guest % Change ({label})", f"{change:.2f}%" if change is not None else "N/A")
+    color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                    f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                    f"</div>", unsafe_allow_html=True)
 
 # =====================================================
 # 8) VOID COUNTS — Weekly / MTD / QTD / YTD
@@ -227,7 +236,10 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 🧾 Void Counts")
 cols = st.columns(4)
 for i, (label, void_qty) in enumerate(void_counts):
-    cols[i].metric(f"Void Count ({label})", f"{int(void_qty)}" if void_qty is not None else "N/A")
+    color = "#f8d7da" if void_qty is not None and void_qty > 0 else "#d4f7dc"
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                    f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
+                    f"</div>", unsafe_allow_html=True)
 
 # =====================================================
 # 9) HME (Drive-Thru) Metrics — Weighted by Cars
