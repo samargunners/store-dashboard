@@ -393,16 +393,22 @@ table_cols[1].dataframe(labor_df, height=250, use_container_width=True)
 
 # HME Daypart Breakdown Table
 
-# Rename columns for HME daypart breakdown
-agg_display.rename(columns={
-    "menu_all_avg": "Menu (avg sec)",
-    "greet_all_avg": "Greet (avg sec)",
-    "service_avg": "Service (avg sec)",
-    "lane_queue_avg": "Lane Queue (avg sec)",
-    "lane_total_avg": "Lane Total (avg sec)",
-}, inplace=True)
-table_cols[2].markdown("**HME Daypart Breakdown**")
-table_cols[2].dataframe(agg_display, height=250, use_container_width=True)
+
+# HME Daypart Breakdown Table (safe display)
+import pandas as pd
+if 'agg_display' in locals() and isinstance(agg_display, pd.DataFrame) and not agg_display.empty:
+    agg_display.rename(columns={
+        "menu_all_avg": "Menu (avg sec)",
+        "greet_all_avg": "Greet (avg sec)",
+        "service_avg": "Service (avg sec)",
+        "lane_queue_avg": "Lane Queue (avg sec)",
+        "lane_total_avg": "Lane Total (avg sec)",
+    }, inplace=True)
+    table_cols[2].markdown("**HME Daypart Breakdown**")
+    table_cols[2].dataframe(agg_display, height=250, use_container_width=True)
+else:
+    table_cols[2].markdown("**HME Daypart Breakdown**")
+    table_cols[2].info("No HME records for the analysis window.")
 
 # Footer
 st.caption("Data sources: public.sales_summary, public.labor_metrics, public.hme_report (Supabase)")
