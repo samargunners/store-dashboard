@@ -145,22 +145,22 @@ with get_supabase_connection() as conn, conn.cursor(cursor_factory=pgu.RealDictC
     for period in periods:
         s, e = get_period_dates(END_DATE, period)
         cur.execute(
-            """
-            SELECT COALESCE(SUM(total_pay),0) AS payroll_total
-            FROM public.labor_metrics
-            WHERE store = %s AND date BETWEEN %s AND %s
-            """,
-            (STORE_PC, s, e),
+              """
+              SELECT COALESCE(SUM(total_pay),0) AS payroll_total
+              FROM public.labor_metrics
+              WHERE pc_number = %s AND date BETWEEN %s AND %s
+              """,
+              (STORE_PC, s, e),
         )
         payroll = float(cur.fetchone()["payroll_total"] or 0)
 
         cur.execute(
-            """
-            SELECT COALESCE(SUM(net_sales),0) AS sales_total
-            FROM public.sales_summary
-            WHERE store = %s AND date BETWEEN %s AND %s
-            """,
-            (STORE_PC, s, e),
+              """
+              SELECT COALESCE(SUM(net_sales),0) AS sales_total
+              FROM public.sales_summary
+              WHERE pc_number = %s AND date BETWEEN %s AND %s
+              """,
+              (STORE_PC, s, e),
         )
         sales = float(cur.fetchone()["sales_total"] or 0)
         pct = safe_div(payroll, sales)
