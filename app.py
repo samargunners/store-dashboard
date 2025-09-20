@@ -119,11 +119,11 @@ def format_secs(x):
 #    (use the max date in sales_summary; fallback to labor_metrics)
 # =====================================================
 with get_supabase_connection() as conn, conn.cursor() as cur:
-    cur.execute("SELECT max(date) FROM public.sales_summary WHERE store = %s", (STORE_PC,))
+    cur.execute("SELECT max(date) FROM public.sales_summary WHERE pc_number = %s", (STORE_PC,))
     row = cur.fetchone()
     sales_max = row[0] if row else None
 
-    cur.execute("SELECT max(date) FROM public.labor_metrics WHERE store = %s", (STORE_PC,))
+    cur.execute("SELECT max(date) FROM public.labor_metrics WHERE pc_number = %s", (STORE_PC,))
     row = cur.fetchone()
     labor_max = row[0] if row else None
 
