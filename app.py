@@ -403,7 +403,6 @@ for i, (label, void_qty) in enumerate(void_counts):
     metric_cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                           f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
                           f"</div>", unsafe_allow_html=True)
-    table_cols[2].info("No HME records for the analysis window.")
 
 # Footer
 st.caption("Data sources: public.sales_summary, public.labor_metrics, public.hme_report (Supabase)")

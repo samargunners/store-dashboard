@@ -412,3 +412,84 @@ else:
 
 # Footer
 st.caption("Data sources: public.sales_summary, public.labor_metrics, public.hme_report (Supabase)")
+
+# ===============================
+# Cards vs Charts Layout Switcher
+# ===============================
+st.markdown("# 📊 Dashboard Layout Options")
+layout = st.radio("Choose dashboard layout:", ["Cards", "Charts"], horizontal=True)
+
+if layout == "Cards":
+    st.markdown("## 💼 Labor Metrics (Cards)")
+    cols = st.columns(4)
+    for i, (label, pct) in enumerate(labor_metrics):
+        color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
+        cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                        f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct:.2f}%</span>"
+                        f"</div>", unsafe_allow_html=True)
+
+    st.markdown("## 💵 Sales Metrics (Cards)")
+    cols = st.columns(4)
+    for i, (label, change) in enumerate(sales_changes):
+        color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+        cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                        f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                        f"</div>", unsafe_allow_html=True)
+
+    st.markdown("## 👥 Guest Count Metrics (Cards)")
+    cols = st.columns(4)
+    for i, (label, change) in enumerate(guest_changes):
+        color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+        cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                        f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                        f"</div>", unsafe_allow_html=True)
+
+    st.markdown("## 🧾 Void Counts (Cards)")
+    cols = st.columns(4)
+    for i, (label, void_qty) in enumerate(void_counts):
+        color = "#f8d7da" if void_qty is not None and void_qty > 0 else "#d4f7dc"
+        cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                        f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
+                        f"</div>", unsafe_allow_html=True)
+
+    st.markdown("## 🚗 HME (Drive-Thru) Metrics (Cards)")
+    kpi_titles = [
+        ("Lane Total (avg)", "lane_total"),
+        ("Service (avg)", "service"),
+        ("Greet (avg)", "greet_all"),
+        ("Menu (avg)", "menu_all"),
+        ("Cars (total)", "cars"),
+    ]
+    for (title, key) in kpi_titles:
+        cols = st.columns(4)
+        for i, row in enumerate(hme_rows):
+            curr_val = row["curr"][key]
+            delta = row["delta"][key]
+            if key == "cars":
+                display = f"{int(curr_val) if curr_val is not None else 0}"
+            else:
+                display = format_secs(curr_val)
+            if delta is None:
+                cols[i].metric(f"{title} — {row['label']}", display)
+            else:
+                cols[i].metric(f"{title} — {row['label']}", display, f"{delta:.1f}%")
+
+elif layout == "Charts":
+    import numpy as np
+    st.markdown("## 💼 Labor Metrics (Charts)")
+    st.bar_chart({label: pct for label, pct in labor_metrics})
+
+    st.markdown("## 💵 Sales Metrics (Charts)")
+    st.bar_chart({label: change for label, change in sales_changes})
+
+    st.markdown("## 👥 Guest Count Metrics (Charts)")
+    st.bar_chart({label: change for label, change in guest_changes})
+
+    st.markdown("## 🧾 Void Counts (Charts)")
+    st.bar_chart({label: void_qty for label, void_qty in void_counts})
+
+    st.markdown("## 🚗 HME (Drive-Thru) Metrics (Charts)")
+    for (title, key) in kpi_titles:
+        st.line_chart({row['label']: row['curr'][key] for row in hme_rows})
+
+st.caption("Switch between Cards and Charts using the radio button above. Remove the layout you don't want.")
