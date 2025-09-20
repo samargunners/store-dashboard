@@ -176,7 +176,7 @@ for i, (label, pct) in enumerate(labor_metrics):
 # =====================================================
 def period_sum(cur, table: str, col: str, s: date, e: date):
     cur.execute(
-        f"SELECT COALESCE(SUM({col}),0) FROM public.{table} WHERE store = %s AND date BETWEEN %s AND %s",
+        f"SELECT COALESCE(SUM({col}),0) FROM public.{table} WHERE pc_number = %s AND date BETWEEN %s AND %s",
         (STORE_PC, s, e),
     )
     return float(cur.fetchone()[0] or 0)
