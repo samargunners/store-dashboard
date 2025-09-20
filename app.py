@@ -371,14 +371,38 @@ else:
     agg_display.rename(columns={
         "time_measure": "Daypart",
         "total_cars": "Cars",
-        "menu_all_avg": "Menu (avg sec)",
-        "greet_all_avg": "Greet (avg sec)",
-        "service_avg": "Service (avg sec)",
-        "lane_queue_avg": "Lane Queue (avg sec)",
-        "lane_total_avg": "Lane Total (avg sec)",
     }, inplace=True)
 
-    st.dataframe(agg_display, use_container_width=True)
+# ===============================
+# Display all tables side-by-side
+# ===============================
+st.markdown("## 📊 All Tables Overview")
+table_cols = st.columns(3)
+
+# Sales Summary Table
+with get_supabase_connection() as conn:
+    sales_df = pd.read_sql(f"SELECT * FROM public.sales_summary WHERE pc_number = %s AND date BETWEEN %s AND %s ORDER BY date DESC", conn, params=[STORE_PC, END_DATE - timedelta(days=6), END_DATE])
+table_cols[0].markdown("**Sales Summary**")
+table_cols[0].dataframe(sales_df, height=250, use_container_width=True)
+
+# Labor Metrics Table
+with get_supabase_connection() as conn:
+    labor_df = pd.read_sql(f"SELECT * FROM public.labor_metrics WHERE pc_number = %s AND date BETWEEN %s AND %s ORDER BY date DESC", conn, params=[STORE_PC, END_DATE - timedelta(days=6), END_DATE])
+table_cols[1].markdown("**Labor Metrics**")
+table_cols[1].dataframe(labor_df, height=250, use_container_width=True)
+
+# HME Daypart Breakdown Table
+
+# Rename columns for HME daypart breakdown
+agg_display.rename(columns={
+    "menu_all_avg": "Menu (avg sec)",
+    "greet_all_avg": "Greet (avg sec)",
+    "service_avg": "Service (avg sec)",
+    "lane_queue_avg": "Lane Queue (avg sec)",
+    "lane_total_avg": "Lane Total (avg sec)",
+}, inplace=True)
+table_cols[2].markdown("**HME Daypart Breakdown**")
+table_cols[2].dataframe(agg_display, height=250, use_container_width=True)
 
 # Footer
 st.caption("Data sources: public.sales_summary, public.labor_metrics, public.hme_report (Supabase)")
