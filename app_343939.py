@@ -131,7 +131,7 @@ if not sales_max and not labor_max:
     st.info("No data found yet for this store in sales_summary/labor_metrics.")
     st.stop()
 
-END_DATE: date = date.today() - timedelta(days=1)
+END_DATE: date = date(2025, 9, 12)
 st.caption(f"Latest date (store-locked): {END_DATE} (fixed for layout testing)")
 
 # =====================================================
