@@ -198,9 +198,10 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 💵 Sales Metrics")
 cols = st.columns(4)
 for i, (label, change) in enumerate(sales_changes):
-    color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+    display_change = change if change is not None else 0
+    color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                    f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                    f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
