@@ -244,6 +244,25 @@ for i, (label, void_qty) in enumerate(void_counts):
                     f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
                     f"</div>", unsafe_allow_html=True)
 
+# --- METRICS BOX 5: Refund Metrics ---
+st.markdown("## Refund Metrics")
+# Use STORE_PC from environment
+refund_values = []
+with get_supabase_connection() as conn:
+    for period in periods:
+        s, e = get_period_dates(END_DATE, period)
+        refund_total = pd.read_sql(
+            "SELECT SUM(refund) as refund_total FROM public.sales_summary WHERE pc_number = %s AND date BETWEEN %s AND %s",
+            conn, params=[STORE_PC, s, e])["refund_total"].iloc[0]
+        refund_values.append((labels[periods.index(period)], refund_total))
+cols = st.columns(4)
+for i, (label, refund_total) in enumerate(refund_values):
+    if refund_total is not None:
+        cols[i].metric(f"Refunds ({label})", f"${refund_total:,.2f}")
+    else:
+        cols[i].metric(f"Refunds ({label})", "N/A")
+
+
 # =====================================================
 # 9) HME (Drive-Thru) Metrics — Weighted by Cars
 #    • Period KPIs: Weekly / MTD / QTD / YTD (current vs previous)
