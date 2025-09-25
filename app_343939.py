@@ -131,7 +131,7 @@ if not sales_max and not labor_max:
     st.info("No data found yet for this store in sales_summary/labor_metrics.")
     st.stop()
 
-END_DATE: date = date(2025, 9, 12)
+END_DATE: date = date.today() - timedelta(days=1)
 st.caption(f"Latest date (store-locked): {END_DATE} (fixed for layout testing)")
 
 # =====================================================
@@ -171,7 +171,7 @@ cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
     color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
     pct_display = f"{pct:.2f}%" if pct is not None else "N/A"
-    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+    cols[i].markdown(f"<div style='baackground-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct_display}</span>"
                     f"</div>", unsafe_allow_html=True)
 
@@ -198,9 +198,10 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 💵 Sales Metrics")
 cols = st.columns(4)
 for i, (label, change) in enumerate(sales_changes):
-    color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+    display_change = change if change is not None else 0
+    color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                    f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                    f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
@@ -219,9 +220,10 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 👥 Guest Count Metrics")
 cols = st.columns(4)
 for i, (label, change) in enumerate(guest_changes):
-    color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+    display_change = change if change is not None else 0
+    color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                    f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                    f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
@@ -432,17 +434,19 @@ if layout == "Cards":
     st.markdown("## 💵 Sales Metrics (Cards)")
     cols = st.columns(4)
     for i, (label, change) in enumerate(sales_changes):
-        color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+        display_change = change if change is not None else 0
+        color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
         cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                        f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                        f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                         f"</div>", unsafe_allow_html=True)
 
     st.markdown("## 👥 Guest Count Metrics (Cards)")
     cols = st.columns(4)
     for i, (label, change) in enumerate(guest_changes):
-        color = "#d4f7dc" if change is not None and change > 0 else ("#f8d7da" if change is not None and change < 0 else "#fff3cd")
+        display_change = change if change is not None else 0
+        color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
         cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                        f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{change:.2f}%</span>"
+                        f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                         f"</div>", unsafe_allow_html=True)
 
     st.markdown("## 🧾 Void Counts (Cards)")
