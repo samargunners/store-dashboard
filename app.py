@@ -170,9 +170,10 @@ st.markdown("## 💼 Labor Metrics")
 cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
     color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
+    display_pct = pct if pct is not None else 0
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                    f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct:.2f}%</span>"
-                    f"</div>", unsafe_allow_html=True)
+                     f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{display_pct:.2f}%</span>"
+                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
 # 6) SALES % change — Weekly / MTD / QTD / YTD (vs previous)
