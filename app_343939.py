@@ -275,6 +275,7 @@ HME_TARGET_COLS = [
     "service", "lane_queue", "lane_total"
 ]
 
+
 def fetch_hme(store: str, start: date, end: date) -> pd.DataFrame:
     q = f"""
         SELECT {', '.join(HME_TARGET_COLS)}
