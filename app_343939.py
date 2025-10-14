@@ -171,7 +171,7 @@ cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
     color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
     pct_display = f"{pct:.2f}%" if pct is not None else "N/A"
-    cols[i].markdown(f"<div style='baackground-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct_display}</span>"
                     f"</div>", unsafe_allow_html=True)
 
@@ -244,9 +244,9 @@ for i, (label, void_qty) in enumerate(void_counts):
                     f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
                     f"</div>", unsafe_allow_html=True)
 
-# --- METRICS BOX 5: Refund Metrics ---
-st.markdown("## Refund Metrics")
-# Use STORE_PC from environment
+# =====================================================
+# 5) REFUND METRICS — Weekly / MTD / QTD / YTD
+# =====================================================
 refund_values = []
 with get_supabase_connection() as conn:
     for period in periods:
@@ -255,12 +255,16 @@ with get_supabase_connection() as conn:
             "SELECT SUM(refund) as refund_total FROM public.sales_summary WHERE pc_number = %s AND date BETWEEN %s AND %s",
             conn, params=[STORE_PC, s, e])["refund_total"].iloc[0]
         refund_values.append((labels[periods.index(period)], refund_total))
+
+st.markdown("## 💳 Refund Metrics")
 cols = st.columns(4)
 for i, (label, refund_total) in enumerate(refund_values):
-    if refund_total is not None:
-        cols[i].metric(f"Refunds ({label})", f"${refund_total:,.2f}")
-    else:
-        cols[i].metric(f"Refunds ({label})", "N/A")
+    # Color logic: red for high refunds, yellow for moderate, green for low/none
+    color = "#f8d7da" if refund_total is not None and refund_total > 100 else ("#fff3cd" if refund_total is not None and refund_total > 0 else "#d4f7dc")
+    refund_display = f"${refund_total:,.2f}" if refund_total is not None else "N/A"
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                    f"<b>Refunds ({label})</b><br><span style='font-size:1.5em'>{refund_display}</span>"
+                    f"</div>", unsafe_allow_html=True)
 
 
 # =====================================================
