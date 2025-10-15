@@ -11,13 +11,12 @@ import psycopg2.extras as pgu
 # =====================================================
 # 1) STORE LOCK (no UI controls) + Page config
 # =====================================================
-STORE_PC = os.getenv("STORE_PC")
-if not STORE_PC:
-    # Fallback to Secrets -> [env]
-    try:
-        STORE_PC = st.secrets["env"]["STORE_PC"]
-    except (KeyError, AttributeError):
-        STORE_PC = None
+# First priority: Streamlit Secrets
+try:
+    STORE_PC = st.secrets["env"]["STORE_PC"]
+except (KeyError, AttributeError):
+    # Fallback to OS environment variable
+    STORE_PC = os.getenv("STORE_PC")
 
 # Normalize
 if isinstance(STORE_PC, (int, float)):
