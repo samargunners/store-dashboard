@@ -11,24 +11,10 @@ import psycopg2.extras as pgu
 # =====================================================
 # 1) STORE LOCK (no UI controls) + Page config
 # =====================================================
-# Get STORE_PC from Streamlit Secrets only
-st.write("🔍 **DEBUG INFO:**")
-st.write(f"Available secrets keys: {list(st.secrets.keys())}")
-if "env" in st.secrets:
-    st.write(f"Available env keys: {list(st.secrets['env'].keys())}")
-    st.write(f"Full env section: {dict(st.secrets['env'])}")
-else:
-    st.error("❌ No 'env' section found in secrets!")
-
-try:
-    STORE_PC = st.secrets["env"]["STORE_PC"]
-    st.success(f"✅ Successfully read STORE_PC = '{STORE_PC}' from secrets")
-except KeyError as e:
-    st.error(f"❌ KeyError: {str(e)}")
-    STORE_PC = None
-except Exception as e:
-    st.error(f"❌ Unexpected error: {str(e)}")
-    STORE_PC = None
+STORE_PC = os.getenv("STORE_PC")
+if not STORE_PC:
+    # Fallback to Secrets -> [env]
+    STORE_PC = (st.secrets.get("env", {}) or {}).get("STORE_PC")
 
 # Normalize
 if isinstance(STORE_PC, (int, float)):
@@ -37,7 +23,7 @@ if STORE_PC:
     STORE_PC = str(STORE_PC).strip()
 
 if not STORE_PC:
-    st.error("STORE_PC not found in Streamlit Secrets. Please configure it in your Streamlit Cloud app settings as:\n\n[env]\nSTORE_PC = \"301290\"\n\nMake sure to restart your app after updating secrets.")
+    st.error("STORE_PC environment variable not set. Provide it under Secrets as:\n\n[env]\nSTORE_PC = \"343939\"\n\nOr set an OS env var named STORE_PC.")
     st.stop()
 
 
@@ -187,10 +173,10 @@ st.markdown("## 💼 Labor Metrics")
 cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
     color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
-    display_pct = pct if pct is not None else 0
+    pct_display = f"{pct:.2f}%" if pct is not None else "N/A"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
-                     f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{display_pct:.2f}%</span>"
-                     f"</div>", unsafe_allow_html=True)
+                    f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct_display}</span>"
+                    f"</div>", unsafe_allow_html=True)
 
 # =====================================================
 # 6) SALES % change — Weekly / MTD / QTD / YTD (vs previous)
@@ -212,13 +198,23 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
         change = safe_div(curr_sales - prev_sales, prev_sales)
         sales_changes.append((labels[periods.index(period)], change))
 
+# Collect sales dollar amounts for display
+sales_amounts = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        curr_s, curr_e = get_period_dates(END_DATE, period)
+        curr_sales = period_sum(cur, "sales_summary", "net_sales", curr_s, curr_e)
+        sales_amounts.append((labels[periods.index(period)], curr_sales))
+
 st.markdown("## 💵 Sales Metrics")
 cols = st.columns(4)
-for i, (label, change) in enumerate(sales_changes):
+for i, ((label, change), (_, amount)) in enumerate(zip(sales_changes, sales_amounts)):
     display_change = change if change is not None else 0
+    sales_display = f"${amount:,.0f}" if amount is not None else "$0"
     color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
+                    f"<br><small>{sales_display}</small>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
@@ -234,13 +230,23 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
         change = safe_div(curr_guests - prev_guests, prev_guests)
         guest_changes.append((labels[periods.index(period)], change))
 
+# Collect guest count numbers for display
+guest_counts = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        curr_s, curr_e = get_period_dates(END_DATE, period)
+        curr_guests = period_sum(cur, "sales_summary", "guest_count", curr_s, curr_e)
+        guest_counts.append((labels[periods.index(period)], curr_guests))
+
 st.markdown("## 👥 Guest Count Metrics")
 cols = st.columns(4)
-for i, (label, change) in enumerate(guest_changes):
+for i, ((label, change), (_, count)) in enumerate(zip(guest_changes, guest_counts)):
     display_change = change if change is not None else 0
+    count_display = f"{int(count):,}" if count is not None else "0"
     color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
+                    f"<br><small>{count_display} guests</small>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
@@ -259,5 +265,27 @@ for i, (label, void_qty) in enumerate(void_counts):
     color = "#f8d7da" if void_qty is not None and void_qty > 0 else "#d4f7dc"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
+                    f"</div>", unsafe_allow_html=True)
+
+# =====================================================
+# 5) REFUND METRICS — Weekly / MTD / QTD / YTD
+# =====================================================
+refund_values = []
+with get_supabase_connection() as conn:
+    for period in periods:
+        s, e = get_period_dates(END_DATE, period)
+        refund_total = pd.read_sql(
+            "SELECT SUM(refund) as refund_total FROM public.sales_summary WHERE pc_number = %s AND date BETWEEN %s AND %s",
+            conn, params=[STORE_PC, s, e])["refund_total"].iloc[0]
+        refund_values.append((labels[periods.index(period)], refund_total))
+
+st.markdown("## 💳 Refund Metrics")
+cols = st.columns(4)
+for i, (label, refund_total) in enumerate(refund_values):
+    # Color logic: red for high refunds, yellow for moderate, green for low/none
+    color = "#f8d7da" if refund_total is not None and refund_total > 100 else ("#fff3cd" if refund_total is not None and refund_total > 0 else "#d4f7dc")
+    refund_display = f"${refund_total:,.2f}" if refund_total is not None else "N/A"
+    cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
+                    f"<b>Refunds ({label})</b><br><span style='font-size:1.5em'>{refund_display}</span>"
                     f"</div>", unsafe_allow_html=True)
 
