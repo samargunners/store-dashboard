@@ -14,7 +14,10 @@ import psycopg2.extras as pgu
 STORE_PC = os.getenv("STORE_PC")
 if not STORE_PC:
     # Fallback to Secrets -> [env]
-    STORE_PC = (st.secrets.get("env", {}) or {}).get("STORE_PC")
+    try:
+        STORE_PC = st.secrets["env"]["STORE_PC"]
+    except (KeyError, AttributeError):
+        STORE_PC = None
 
 # Normalize
 if isinstance(STORE_PC, (int, float)):
@@ -23,7 +26,7 @@ if STORE_PC:
     STORE_PC = str(STORE_PC).strip()
 
 if not STORE_PC:
-    st.error("STORE_PC environment variable not set. Provide it under Secrets as:\n\n[env]\nSTORE_PC = \"301290\"\n\nOr set an OS env var named STORE_PC.")
+    st.error("STORE_PC environment variable not set. Provide it under Secrets as:\n\n[env]\nSTORE_PC = \"343939\"\n\nOr set an OS env var named STORE_PC.")
     st.stop()
 
 
