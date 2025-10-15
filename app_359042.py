@@ -198,13 +198,23 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
         change = safe_div(curr_sales - prev_sales, prev_sales)
         sales_changes.append((labels[periods.index(period)], change))
 
+# Collect sales dollar amounts for display
+sales_amounts = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        curr_s, curr_e = get_period_dates(END_DATE, period)
+        curr_sales = period_sum(cur, "sales_summary", "net_sales", curr_s, curr_e)
+        sales_amounts.append((labels[periods.index(period)], curr_sales))
+
 st.markdown("## 💵 Sales Metrics")
 cols = st.columns(4)
-for i, (label, change) in enumerate(sales_changes):
+for i, ((label, change), (_, amount)) in enumerate(zip(sales_changes, sales_amounts)):
     display_change = change if change is not None else 0
+    sales_display = f"${amount:,.0f}" if amount is not None else "$0"
     color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
+                    f"<br><small>{sales_display}</small>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
@@ -220,13 +230,23 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
         change = safe_div(curr_guests - prev_guests, prev_guests)
         guest_changes.append((labels[periods.index(period)], change))
 
+# Collect guest count numbers for display
+guest_counts = []
+with get_supabase_connection() as conn, conn.cursor() as cur:
+    for period in periods:
+        curr_s, curr_e = get_period_dates(END_DATE, period)
+        curr_guests = period_sum(cur, "sales_summary", "guest_count", curr_s, curr_e)
+        guest_counts.append((labels[periods.index(period)], curr_guests))
+
 st.markdown("## 👥 Guest Count Metrics")
 cols = st.columns(4)
-for i, (label, change) in enumerate(guest_changes):
+for i, ((label, change), (_, count)) in enumerate(zip(guest_changes, guest_counts)):
     display_change = change if change is not None else 0
+    count_display = f"{int(count):,}" if count is not None else "0"
     color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
+                    f"<br><small>{count_display} guests</small>"
                     f"</div>", unsafe_allow_html=True)
 
 # =====================================================
@@ -315,7 +335,7 @@ def pct_change(curr, prev):
     except Exception:
         return None
 
-hme_labels = ["Last 7 Days", "Last 30 Days", "Last 90 Days", "Last 365 Days"]
+hme_labels = ["Weekly", "MTD", "QTD", "YTD"]
 hme_periods = ["week", "month", "quarter", "year"]
 hme_rows = []
 for per, label in zip(hme_periods, hme_labels):
@@ -342,12 +362,12 @@ for per, label in zip(hme_periods, hme_labels):
         }
     })
 
-# KPI layout: Lane Total (primary), then Service, Greet, Menu, Cars
+# KPI layout: Lane Total, Greet, Menu, Service, Cars
 kpi_titles = [
     ("Lane Total (avg)", "lane_total"),
-    ("Service (avg)", "service"),
     ("Greet (avg)", "greet_all"),
     ("Menu (avg)", "menu_all"),
+    ("Service (avg)", "service"),
     ("Cars (total)", "cars"),
 ]
 
