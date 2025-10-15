@@ -28,7 +28,7 @@ if not STORE_PC:
 
 
 st.set_page_config(page_title=f"Store {STORE_PC} — Metrics Dashboard", layout="wide")
-st.title(f"🏪 Store {STORE_PC} — Metrics Dashboard (Latest)")
+st.title(f"🏪 Store {STORE_PC} — Metrics Dashboard (Rolling Periods)")
 
 # =====================================================
 # 2) DB connection (Supabase Postgres via Streamlit secrets)
@@ -51,18 +51,22 @@ def get_supabase_connection():
 # =====================================================
 
 def get_period_dates(ref_date: date, period: str) -> tuple[date, date]:
+    """Get dynamic rolling period dates - always equal length periods"""
     if period == "week":
+        # Last 7 days
         start = ref_date - timedelta(days=6)
         end = ref_date
     elif period == "month":
-        start = ref_date.replace(day=1)
+        # Last 30 days
+        start = ref_date - timedelta(days=29)
         end = ref_date
     elif period == "quarter":
-        q = (ref_date.month - 1) // 3 + 1
-        start = date(ref_date.year, 3 * q - 2, 1)
+        # Last 90 days
+        start = ref_date - timedelta(days=89)
         end = ref_date
     elif period == "year":
-        start = date(ref_date.year, 1, 1)
+        # Last 365 days
+        start = ref_date - timedelta(days=364)
         end = ref_date
     else:
         start = ref_date
@@ -71,24 +75,23 @@ def get_period_dates(ref_date: date, period: str) -> tuple[date, date]:
 
 
 def get_prev_period_dates(ref_date: date, period: str) -> tuple[date, date]:
+    """Get previous dynamic rolling period dates - same length as current period"""
     if period == "week":
+        # Previous 7 days (days 8-14 ago)
         end = ref_date - timedelta(days=7)
         start = end - timedelta(days=6)
     elif period == "month":
-        first = ref_date.replace(day=1)
-        end = first - timedelta(days=1)
-        start = end.replace(day=1)
+        # Previous 30 days (days 31-60 ago)
+        end = ref_date - timedelta(days=30)
+        start = end - timedelta(days=29)
     elif period == "quarter":
-        q = (ref_date.month - 1) // 3 + 1
-        if q == 1:
-            end = date(ref_date.year - 1, 12, 31)
-            start = date(ref_date.year - 1, 10, 1)
-        else:
-            end = date(ref_date.year, 3 * (q - 1), 1) - timedelta(days=1)
-            start = date(end.year, 3 * (q - 1) - 2, 1)
+        # Previous 90 days (days 91-180 ago)
+        end = ref_date - timedelta(days=90)
+        start = end - timedelta(days=89)
     elif period == "year":
-        end = date(ref_date.year - 1, 12, 31)
-        start = date(ref_date.year - 1, 1, 1)
+        # Previous 365 days (days 366-730 ago)
+        end = ref_date - timedelta(days=365)
+        start = end - timedelta(days=364)
     else:
         start = ref_date
         end = ref_date
@@ -138,7 +141,7 @@ st.caption(f"Latest date (store-locked): {END_DATE} (fixed for layout testing)")
 # 5) LABOR % to SALES — Weekly / MTD / QTD / YTD
 # =====================================================
 periods = ["week", "month", "quarter", "year"]
-labels = ["Weekly", "MTD", "QTD", "YTD"]
+labels = ["Last 7 Days", "Last 30 Days", "Last 90 Days", "Last 365 Days"]
 
 labor_metrics = []
 with get_supabase_connection() as conn, conn.cursor(cursor_factory=pgu.RealDictCursor) as cur:
