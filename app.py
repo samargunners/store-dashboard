@@ -12,9 +12,22 @@ import psycopg2.extras as pgu
 # 1) STORE LOCK (no UI controls) + Page config
 # =====================================================
 # Get STORE_PC from Streamlit Secrets only
+st.write("🔍 **DEBUG INFO:**")
+st.write(f"Available secrets keys: {list(st.secrets.keys())}")
+if "env" in st.secrets:
+    st.write(f"Available env keys: {list(st.secrets['env'].keys())}")
+    st.write(f"Full env section: {dict(st.secrets['env'])}")
+else:
+    st.error("❌ No 'env' section found in secrets!")
+
 try:
     STORE_PC = st.secrets["env"]["STORE_PC"]
-except (KeyError, AttributeError):
+    st.success(f"✅ Successfully read STORE_PC = '{STORE_PC}' from secrets")
+except KeyError as e:
+    st.error(f"❌ KeyError: {str(e)}")
+    STORE_PC = None
+except Exception as e:
+    st.error(f"❌ Unexpected error: {str(e)}")
     STORE_PC = None
 
 # Normalize
