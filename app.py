@@ -14,7 +14,15 @@ import psycopg2.extras as pgu
 # Get STORE_PC from Streamlit Secrets only
 try:
     STORE_PC = st.secrets["env"]["STORE_PC"]
-except (KeyError, AttributeError):
+    st.write(f"✅ Debug: Successfully read STORE_PC = '{STORE_PC}' from secrets")
+except KeyError as e:
+    st.error(f"❌ Debug: KeyError accessing secrets - {str(e)}")
+    st.write(f"Available secrets keys: {list(st.secrets.keys())}")
+    if "env" in st.secrets:
+        st.write(f"Available env keys: {list(st.secrets['env'].keys())}")
+    STORE_PC = None
+except Exception as e:
+    st.error(f"❌ Debug: Unexpected error - {str(e)}")
     STORE_PC = None
 
 # Normalize
@@ -22,9 +30,10 @@ if isinstance(STORE_PC, (int, float)):
     STORE_PC = str(int(STORE_PC))
 if STORE_PC:
     STORE_PC = str(STORE_PC).strip()
+    st.write(f"✅ Debug: Final normalized STORE_PC = '{STORE_PC}'")
 
 if not STORE_PC:
-    st.error("STORE_PC environment variable not set. Provide it under Secrets as:\n\n[env]\nSTORE_PC = \"343939\"\n\nOr set an OS env var named STORE_PC.")
+    st.error("STORE_PC not found in Streamlit Secrets. Please configure it in your Streamlit Cloud app settings as:\n\n[env]\nSTORE_PC = \"301290\"\n\nMake sure to restart your app after updating secrets.")
     st.stop()
 
 
