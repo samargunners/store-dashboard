@@ -117,6 +117,68 @@ def weighted_avg(series, weights):
 def format_secs(x):
     return f"{x:.0f} sec" if x is not None else "N/A"
 
+
+def get_metric_color(value, is_change=False, lower_is_better=False, thresholds=None):
+    """
+    Get color for metric display based on whether lower or higher is better.
+    
+    Args:
+        value: The metric value
+        is_change: Whether this is a change percentage (vs absolute value)
+        lower_is_better: If True, lower values get green, higher get red
+        thresholds: Optional dict with 'good' and 'bad' thresholds for absolute values
+    
+    Returns:
+        Color hex code for background
+    """
+    if value is None:
+        return "#fff3cd"  # Yellow for N/A
+    
+    if is_change:
+        # For percentage changes
+        if lower_is_better:
+            # Lower (negative) changes are better
+            if value < -2:
+                return "#d4f7dc"  # Green - significant improvement
+            elif value < 0:
+                return "#fff3cd"  # Yellow - slight improvement
+            else:
+                return "#f8d7da"  # Red - getting worse
+        else:
+            # Higher (positive) changes are better
+            if value > 2:
+                return "#d4f7dc"  # Green - significant improvement
+            elif value > 0:
+                return "#fff3cd"  # Yellow - slight improvement
+            else:
+                return "#f8d7da"  # Red - getting worse
+    else:
+        # For absolute values
+        if thresholds:
+            good_threshold = thresholds.get('good', 0)
+            bad_threshold = thresholds.get('bad', 0)
+            
+            if lower_is_better:
+                if value <= good_threshold:
+                    return "#d4f7dc"  # Green - good
+                elif value <= bad_threshold:
+                    return "#fff3cd"  # Yellow - okay
+                else:
+                    return "#f8d7da"  # Red - bad
+            else:
+                if value >= good_threshold:
+                    return "#d4f7dc"  # Green - good
+                elif value >= bad_threshold:
+                    return "#fff3cd"  # Yellow - okay
+                else:
+                    return "#f8d7da"  # Red - bad
+        else:
+            # Default behavior for absolute values without thresholds
+            if lower_is_better:
+                return "#d4f7dc" if value == 0 else "#f8d7da"
+            else:
+                return "#d4f7dc" if value > 0 else "#f8d7da"
+
 # =====================================================
 # 4) Resolve latest business date for this store
 #    (use the max date in sales_summary; fallback to labor_metrics)
@@ -172,7 +234,9 @@ with get_supabase_connection() as conn, conn.cursor(cursor_factory=pgu.RealDictC
 st.markdown("## 💼 Labor Metrics")
 cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
-    color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
+    # Labor % to Sales: lower is better (pct is already in percentage form)
+    color = get_metric_color(pct, is_change=False, lower_is_better=True, 
+                           thresholds={'good': 20, 'bad': 30})
     pct_display = f"{pct:.2f}%" if pct is not None else "N/A"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct_display}</span>"
@@ -211,7 +275,8 @@ cols = st.columns(4)
 for i, ((label, change), (_, amount)) in enumerate(zip(sales_changes, sales_amounts)):
     display_change = change if change is not None else 0
     sales_display = f"${amount:,.0f}" if amount is not None else "$0"
-    color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
+    # Sales: higher is better
+    color = get_metric_color(display_change, is_change=True, lower_is_better=False)
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                     f"<br><small>{sales_display}</small>"
@@ -243,7 +308,8 @@ cols = st.columns(4)
 for i, ((label, change), (_, count)) in enumerate(zip(guest_changes, guest_counts)):
     display_change = change if change is not None else 0
     count_display = f"{int(count):,}" if count is not None else "0"
-    color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
+    # Guest Count: higher is better
+    color = get_metric_color(display_change, is_change=True, lower_is_better=False)
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
                     f"<br><small>{count_display} guests</small>"
@@ -262,7 +328,9 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 🧾 Void Counts")
 cols = st.columns(4)
 for i, (label, void_qty) in enumerate(void_counts):
-    color = "#f8d7da" if void_qty is not None and void_qty > 0 else "#d4f7dc"
+    # Void Counts: lower is better (0 is best)
+    color = get_metric_color(void_qty, is_change=False, lower_is_better=True,
+                           thresholds={'good': 0, 'bad': 5})
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
                     f"</div>", unsafe_allow_html=True)
@@ -282,8 +350,9 @@ with get_supabase_connection() as conn:
 st.markdown("## 💳 Refund Metrics")
 cols = st.columns(4)
 for i, (label, refund_total) in enumerate(refund_values):
-    # Color logic: red for high refunds, yellow for moderate, green for low/none
-    color = "#f8d7da" if refund_total is not None and refund_total > 100 else ("#fff3cd" if refund_total is not None and refund_total > 0 else "#d4f7dc")
+    # Refund Metrics: lower is better
+    color = get_metric_color(refund_total, is_change=False, lower_is_better=True,
+                           thresholds={'good': 0, 'bad': 100})
     refund_display = f"${refund_total:,.2f}" if refund_total is not None else "N/A"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Refunds ({label})</b><br><span style='font-size:1.5em'>{refund_display}</span>"
@@ -364,14 +433,14 @@ for per, label in zip(hme_periods, hme_labels):
 
 # KPI layout: Lane Total, Greet, Menu, Service, Cars
 kpi_titles = [
-    ("Lane Total (avg)", "lane_total"),
-    ("Greet (avg)", "greet_all"),
-    ("Menu (avg)", "menu_all"),
-    ("Service (avg)", "service"),
-    ("Cars (total)", "cars"),
+    ("Lane Total (avg)", "lane_total", True),   # lower is better
+    ("Greet (avg)", "greet_all", True),         # lower is better
+    ("Menu (avg)", "menu_all", True),           # lower is better
+    ("Service (avg)", "service", True),         # lower is better
+    ("Cars (total)", "cars", False),            # higher is better
 ]
 
-for (title, key) in kpi_titles:
+for (title, key, lower_is_better) in kpi_titles:
     cols = st.columns(4)
     for i, row in enumerate(hme_rows):
         curr_val = row["curr"][key]
@@ -383,7 +452,22 @@ for (title, key) in kpi_titles:
             display = format_secs(curr_val)
 
         if delta is None:
+            # Use standard metric without delta
             cols[i].metric(f"{title} — {row['label']}", display)
         else:
-            cols[i].metric(f"{title} — {row['label']}", display, f"{delta:.1f}%")
+            # Custom colored metric for proper "better" direction
+            delta_color = get_metric_color(delta, is_change=True, lower_is_better=lower_is_better)
+            delta_symbol = "📉" if (lower_is_better and delta < 0) or (not lower_is_better and delta > 0) else "📈"
+            delta_display = f"{delta:.1f}%"
+            
+            # Create custom metric display with proper colors
+            cols[i].markdown(f"""
+                <div style='border:1px solid #ddd;padding:12px;border-radius:8px;background-color:white'>
+                    <div style='font-size:0.9em;color:#666;margin-bottom:4px'>{title} — {row['label']}</div>
+                    <div style='font-size:1.8em;font-weight:bold;margin-bottom:4px'>{display}</div>
+                    <div style='background-color:{delta_color};padding:4px 8px;border-radius:4px;font-size:0.9em'>
+                        {delta_symbol} {delta_display}
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
