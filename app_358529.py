@@ -172,7 +172,8 @@ with get_supabase_connection() as conn, conn.cursor(cursor_factory=pgu.RealDictC
 st.markdown("## 💼 Labor Metrics")
 cols = st.columns(4)
 for i, (label, pct) in enumerate(labor_metrics):
-    color = "#d4f7dc" if pct is not None and pct < 0.2 else ("#fff3cd" if pct is not None and pct < 0.3 else "#f8d7da")
+    # Labor % to Sales: lower is better - REVERSED LOGIC
+    color = "#d4f7dc" if pct is not None and pct < 20 else ("#fff3cd" if pct is not None and pct < 30 else "#f8d7da")
     pct_display = f"{pct:.2f}%" if pct is not None else "N/A"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Labor % to Sales ({label})</b><br><span style='font-size:1.5em'>{pct_display}</span>"
@@ -262,7 +263,8 @@ with get_supabase_connection() as conn, conn.cursor() as cur:
 st.markdown("## 🧾 Void Counts")
 cols = st.columns(4)
 for i, (label, void_qty) in enumerate(void_counts):
-    color = "#f8d7da" if void_qty is not None and void_qty > 0 else "#d4f7dc"
+    # Void Counts: lower is better - REVERSED LOGIC
+    color = "#d4f7dc" if void_qty is not None and void_qty == 0 else "#f8d7da"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Void Count ({label})</b><br><span style='font-size:1.5em'>{int(void_qty)}</span>"
                     f"</div>", unsafe_allow_html=True)
@@ -282,8 +284,8 @@ with get_supabase_connection() as conn:
 st.markdown("## 💳 Refund Metrics")
 cols = st.columns(4)
 for i, (label, refund_total) in enumerate(refund_values):
-    # Color logic: red for high refunds, yellow for moderate, green for low/none
-    color = "#f8d7da" if refund_total is not None and refund_total > 100 else ("#fff3cd" if refund_total is not None and refund_total > 0 else "#d4f7dc")
+    # Refund Metrics: lower is better - REVERSED LOGIC
+    color = "#d4f7dc" if refund_total is not None and refund_total == 0 else ("#fff3cd" if refund_total is not None and refund_total <= 100 else "#f8d7da")
     refund_display = f"${refund_total:,.2f}" if refund_total is not None else "N/A"
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Refunds ({label})</b><br><span style='font-size:1.5em'>{refund_display}</span>"
@@ -385,5 +387,17 @@ for (title, key) in kpi_titles:
         if delta is None:
             cols[i].metric(f"{title} — {row['label']}", display)
         else:
-            cols[i].metric(f"{title} — {row['label']}", display, f"{delta:.1f}%")
+            # Fix the delta direction for "lower is better" metrics
+            if key in ["lane_total", "greet_all", "menu_all", "service"]:
+                # For these metrics, lower is better, so we want to invert the delta sign
+                # to show negative changes as positive improvements
+                display_delta = -delta if delta is not None else None
+            else:
+                # For cars, higher is better, keep original delta
+                display_delta = delta
+            
+            if display_delta is not None:
+                cols[i].metric(f"{title} — {row['label']}", display, f"{display_delta:.1f}%")
+            else:
+                cols[i].metric(f"{title} — {row['label']}", display)
 
