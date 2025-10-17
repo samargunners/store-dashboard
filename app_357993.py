@@ -212,6 +212,7 @@ cols = st.columns(4)
 for i, ((label, change), (_, amount)) in enumerate(zip(sales_changes, sales_amounts)):
     display_change = change if change is not None else 0
     sales_display = f"${amount:,.0f}" if amount is not None else "$0"
+    # Sales: higher is better - KEEP ORIGINAL LOGIC (already correct)
     color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Sales % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
@@ -244,6 +245,7 @@ cols = st.columns(4)
 for i, ((label, change), (_, count)) in enumerate(zip(guest_changes, guest_counts)):
     display_change = change if change is not None else 0
     count_display = f"{int(count):,}" if count is not None else "0"
+    # Guest Count: higher is better - KEEP ORIGINAL LOGIC (already correct)
     color = "#d4f7dc" if display_change > 0 else ("#f8d7da" if display_change < 0 else "#fff3cd")
     cols[i].markdown(f"<div style='background-color:{color};padding:12px;border-radius:8px;text-align:center'>"
                     f"<b>Guest % Change ({label})</b><br><span style='font-size:1.5em'>{display_change:.2f}%</span>"
